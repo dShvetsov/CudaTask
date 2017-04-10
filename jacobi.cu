@@ -94,9 +94,17 @@ __global__ void jacobi(float* B, float* g, float* x, unsigned size, float* x_nex
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   float x_curr = 0;
 
+  __shared__ float shared_x[SIZE];
+
+  for (int i = 0; i < SIZE / blockDim.x; i++){
+	  int loc_idx = blockDim.x * i + threadIdx.x;
+	  shared_x[loc_idx] = x[loc_idx];
+  }
+  __syncthreads();
+
 #pragma uroll 16
   for (int i = 0; i < size; i++) {
-    x_curr += B[idx + i * size] * x[i];
+    x_curr += B[idx + i * size] * shared_x[i];
   }
   x_next[idx] = x_curr + g[idx];
 }
