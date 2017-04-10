@@ -88,16 +88,28 @@ float precision(float *matrix, float *f, float* x, unsigned size)
 }
 
 // cuda kernel
+//with transpose matrix B
 __global__ void jacobi(float* B, float* g, float* x, unsigned size, float* x_next)
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   float x_curr = 0;
   for (int i = 0; i < size; i++) {
-    x_curr += B[i + idx * size] * x[i];
+    x_curr += B[idx + i * size] * x[i];
   }
   x_next[idx] = x_curr + g[idx];
 }
 
+void transpose(float* matrix, unsigned size)
+{
+	for (unsigned i = 0; i < size; i++){
+		for (unsigned j = 0; j < i; j++){
+			//swap value
+			float tmp = matrix[i + j * size];
+			matrix[i + j * size] = matrix[j + i * size];
+			matrix[j + i * size] = tmp;
+		}
+	}
+}
 
 int main()
 {
@@ -119,6 +131,7 @@ int main()
 
   compute_g(host_A, host_g, size);
   computeBMatrix(host_B, size);
+  transpose(host_B, size); // transpose for optimization
 
   // alloc memory on GPU
   float *dev_B, *dev_g, *dev_x_prev, *dev_x_next;
