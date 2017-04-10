@@ -104,6 +104,7 @@ __global__ void jacobi(float* B, float* g, float* x, unsigned size, float* x_nex
 
 #pragma uroll 16
   for (int i = 0; i < size; i++) {
+    // here loc_i is useless, becouse matrix B
     x_curr += B[idx + i * size] * shared_x[i];
   }
   x_next[idx] = x_curr + g[idx];
