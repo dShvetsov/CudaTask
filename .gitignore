@@ -1,0 +1,6 @@
+*.exe
+Debug/
+*.vcxproj*
+*.aps
+*.rc
+*.pdb
