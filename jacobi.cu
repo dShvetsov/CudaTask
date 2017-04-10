@@ -93,6 +93,8 @@ __global__ void jacobi(float* B, float* g, float* x, unsigned size, float* x_nex
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   float x_curr = 0;
+
+#pragma uroll 16
   for (int i = 0; i < size; i++) {
     x_curr += B[idx + i * size] * x[i];
   }
