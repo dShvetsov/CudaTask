@@ -14,6 +14,10 @@
 // generate random matrix
 void getMatrix(float* matrix, unsigned size)
 {
+  if (matrix == NULL){
+	  fprintf(stderr, "getMatrix doesn't get matrix\n");
+	  exit(-1);
+  }
   for (unsigned i = 0; i < size; i++) {
     for (unsigned j = 0; j < size; j++) {
       matrix[i + size * j] = (((float)rand() / RAND_MAX) - 0.5f) * 10;
@@ -29,6 +33,10 @@ void getMatrix(float* matrix, unsigned size)
 // generate random vector
 void get_f(float *f, unsigned size)
 {
+  if (get_f == NULL){
+	  fprintf(stderr, "get_f doen't get vector\n");
+	  exit(-1);
+  }
   for (unsigned i = 0; i < size; i++) {
     f[i] = (((float)rand() / RAND_MAX) - 0.5f) * 10;
   }
@@ -37,8 +45,15 @@ void get_f(float *f, unsigned size)
 // compute Matrix B, and return result in argument
 void  computeBMatrix(float *A, unsigned size)
 {
+  if (A == NULL){
+	  fprintf(stderr, "computeBMatrix doesn't get matrix\n");
+	  exit(-1);
+  }
   float *inverse_D = (float *)calloc(size, sizeof(float));
-
+  if (inverse_D == NULL){
+	  fprintf(stderr, "error on allocate memory\n");
+	  exit(-1);
+  }
   //D = diag(A)
   //compute D^-1
   for (unsigned i = 0; i < size; i++) {
@@ -66,6 +81,10 @@ void  computeBMatrix(float *A, unsigned size)
 // compute vector g and return in argument
 void compute_g(float *A, float* b, unsigned size)
 {
+  if (A == NULL || b == NULL){
+	  fprintf(stderr, "compute_g get invalud arguments\n");
+	  exit(-1);
+  }
   // g = diag(A) ^ -1 * b;
   for (unsigned i = 0; i < size; i++) {
     b[i] = (1.0f / A[i + size * i]) * b[i];
@@ -75,6 +94,11 @@ void compute_g(float *A, float* b, unsigned size)
 // metric is : max(|Ax_i - f_i|)
 float precision(float *matrix, float *f, float* x, unsigned size)
 {
+  if (matrix == NULL || f == NULL || x == NULL){
+	  fprintf(stderr, "precision get invalid parametr\n");
+	  exit(-1);
+  }
+
   float max = 0;
   for (unsigned i = 0; i < size; i++) {
     float cur = 0;
@@ -122,6 +146,15 @@ void transpose(float* matrix, unsigned size)
 	}
 }
 
+void checkGPUOperation()
+{
+	cudaError_t code = cudaGetLastError();
+	if (code != cudaSuccess){
+		fprintf(stderr, "Cuda Error : %s\n", cudaGetErrorString(code));
+		exit(-1);
+	}
+}
+
 int main()
 {
   float eps = EPS;
@@ -133,6 +166,11 @@ int main()
   float *host_f = (float *)malloc(size * sizeof(float));
   float *host_g = (float *)malloc(size * sizeof(float));
   float *host_x = (float *)calloc(size, sizeof(float)); // start with null vector
+  if (host_A == NULL || host_B == NULL || host_f == NULL
+	  || host_g == NULL || host_x == NULL){
+    fprintf(stderr, "error on allocate memory\n");
+	return -1;
+  }
 
   getMatrix(host_A, size);
   get_f(host_f, size);
@@ -147,14 +185,21 @@ int main()
   // alloc memory on GPU
   float *dev_B, *dev_g, *dev_x_prev, *dev_x_next;
   cudaMalloc((void **)&dev_B, size * size * sizeof(float));
+  checkGPUOperation();
   cudaMalloc((void **)&dev_g, size * sizeof(float));
+  checkGPUOperation();
   cudaMalloc((void **)&dev_x_prev, size * sizeof(float));
+  checkGPUOperation();
   cudaMalloc((void **)&dev_x_next, size * sizeof(float));
+  checkGPUOperation();
 
   //copy memory from CPU to GPU
   cudaMemcpy(dev_x_prev, host_x, size * sizeof(float), cudaMemcpyHostToDevice);
+  checkGPUOperation();
   cudaMemcpy(dev_x_next, dev_x_prev, size * sizeof(float), cudaMemcpyDeviceToDevice);
+  checkGPUOperation();
   cudaMemcpy(dev_B, host_B, size * size * sizeof(float), cudaMemcpyHostToDevice);
+  checkGPUOperation();
   cudaMemcpy(dev_g, host_g, size * sizeof(float), cudaMemcpyHostToDevice);
 
   float p = 0; //precision
@@ -172,6 +217,7 @@ int main()
     }
 	//get result
     cudaMemcpy(host_x, dev_x_next, size * sizeof(float), cudaMemcpyDeviceToHost);
+	checkGPUOperation();
 
 	prev_p = p;
 	p = precision(host_A, host_f, host_x, size);
