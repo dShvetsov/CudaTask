@@ -11,6 +11,8 @@
 #define BIG_VALUE 65536
 #define BLOCK_SIZE 256
 
+texture<float, 2, cudaReadModeElementType> texMatrix;
+
 // generate random matrix
 void getMatrix(float* matrix, unsigned size)
 {
@@ -113,7 +115,7 @@ float precision(float *matrix, float *f, float* x, unsigned size)
 
 // cuda kernel
 //with transpose matrix B
-__global__ void jacobi(float* B, float* g, float* x, unsigned size, float* x_next)
+__global__ void jacobi(float* g, float* x, unsigned size, float* x_next)
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   float x_curr = 0;
@@ -129,7 +131,8 @@ __global__ void jacobi(float* B, float* g, float* x, unsigned size, float* x_nex
 #pragma uroll 16
   for (int i = 0; i < size; i++) {
     // here loc_i is useless, becouse matrix B
-    x_curr += B[idx + i * size] * shared_x[i];
+    float tmp = tex2D(texMatrix, idx + 0.5f, i + 0.5f);
+    x_curr += tmp* shared_x[i];
   }
   x_next[idx] = x_curr + g[idx];
 }
@@ -183,9 +186,7 @@ int main()
   transpose(host_B, size); // transpose for optimization
 
   // alloc memory on GPU
-  float *dev_B, *dev_g, *dev_x_prev, *dev_x_next;
-  cudaMalloc((void **)&dev_B, size * size * sizeof(float));
-  checkGPUOperation();
+  float *dev_g, *dev_x_prev, *dev_x_next;
   cudaMalloc((void **)&dev_g, size * sizeof(float));
   checkGPUOperation();
   cudaMalloc((void **)&dev_x_prev, size * sizeof(float));
@@ -193,12 +194,26 @@ int main()
   cudaMalloc((void **)&dev_x_next, size * sizeof(float));
   checkGPUOperation();
 
+  // make texture
+
+  cudaChannelFormatDesc channel =
+      cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
+
+  cudaArray *cuArray;
+  cudaMallocArray(&cuArray, &channel, size, size);
+  checkGPUOperation();
+
+  cudaMemcpyToArray(cuArray, 0, 0, host_B, size * size * sizeof(float),
+                    cudaMemcpyHostToDevice);
+  checkGPUOperation();
+
+  cudaBindTextureToArray(texMatrix, cuArray);
+  checkGPUOperation();
+
   //copy memory from CPU to GPU
   cudaMemcpy(dev_x_prev, host_x, size * sizeof(float), cudaMemcpyHostToDevice);
   checkGPUOperation();
   cudaMemcpy(dev_x_next, dev_x_prev, size * sizeof(float), cudaMemcpyDeviceToDevice);
-  checkGPUOperation();
-  cudaMemcpy(dev_B, host_B, size * size * sizeof(float), cudaMemcpyHostToDevice);
   checkGPUOperation();
   cudaMemcpy(dev_g, host_g, size * sizeof(float), cudaMemcpyHostToDevice);
 
@@ -212,7 +227,7 @@ int main()
       dev_x_next = dev_x_prev;
       dev_x_prev = tmp;
 
-	  jacobi <<<dim3(size / BLOCK_SIZE), dim3(BLOCK_SIZE)>>> (dev_B, dev_g, dev_x_prev, size, dev_x_next);
+	  jacobi <<<dim3(size / BLOCK_SIZE), dim3(BLOCK_SIZE)>>> (dev_g, dev_x_prev, size, dev_x_next);
 	  cudaDeviceSynchronize();
     }
 	//get result
@@ -234,7 +249,6 @@ int main()
   free(host_x);
 
   //free memory on GPU
-  cudaFree(dev_B);
   cudaFree(dev_g);
   cudaFree(dev_x_prev);
   cudaFree(dev_x_next);
